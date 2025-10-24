@@ -1,6 +1,8 @@
 # Tiny WASM, Army of One
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/06d7b9d7-2e20-4d00-a512-a6b1ca95bcd2" />
+
 https://mallond.github.io/AI-WASM-Tiny-World-POC-GTFO/
+
 ## Intro — The Pitch
 
 Spin up **tiny, sandboxed WASM apps** that scale to millions, run in **sub-second time**, and cut infra spend by **~90%**. No armies of SREs, no sprawling microservices—just **an army of one** armed with Rust, Fast-CGI, and edge-native AI.
