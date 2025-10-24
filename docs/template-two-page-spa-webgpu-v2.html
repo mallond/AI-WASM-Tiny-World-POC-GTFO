@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Two-Page SPA + WebGPU AI (Granite 4.0 Micro)</title>
+  <style>
+    /* === Base styles from template-two-page-spa === */
+    :root {
+      --fs-body: 1rem;
+      --lh-body: 1.5;
+      --fs-h6: 1.25rem;
+      --fs-h5: 1.563rem;
+      --fs-h4: 1.953rem;
+      --fs-h3: 2.441rem;
+      --fs-h2: 3.052rem;
+      --fs-h1: 3.815rem;
+      --ls-heading-tight: -0.015em;
+      --space-1: 8px;
+      --space-2: 16px;
+      --space-3: 24px;
+      --space-4: 32px;
+      --space-5: 40px;
+      --space-6: 48px;
+      --space-8: 64px;
+      --neutral-0: #ffffff;
+      --neutral-900: #0b0b0c;
+      --surface: #0f172a;
+      --surface-2: #111827;
+      --surface-3: #0b1022;
+      --accent: #f7c948;
+      --radius-lg: 14px;
+      --shadow-1: 0 6px 24px rgba(0,0,0,.25);
+    }
+    html, body { height: 100%; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 400 var(--fs-body)/var(--lh-body) system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--neutral-0);
+      background: radial-gradient(1200px 600px at 80% -10%, #1d2a53 0%, transparent 60%),
+                  radial-gradient(1200px 600px at 20% 110%, #14532d 0%, transparent 60%),
+                  linear-gradient(180deg, var(--surface), var(--surface-2) 60%);
+      overflow: hidden; /* SPA controls scroll */
+    }
+    h1, h2, h3, h4, h5, h6 {
+      letter-spacing: var(--ls-heading-tight);
+      line-height: 1.15;
+      margin: 0 0 var(--space-2);
+    }
+    h1 { font-size: clamp(2.5rem, 6vw, var(--fs-h1)); }
+    h2 { font-size: clamp(1.75rem, 4.5vw, var(--fs-h2)); }
+    p { margin: 0; opacity: .9; }
+
+    .app { position: relative; width: 100vw; height: 100vh; }
+    .pages {
+      position: absolute; inset: 0; display: grid; grid-auto-flow: row; grid-template-rows: 100vh 100vh;
+      transition: transform 600ms cubic-bezier(.22,1,.36,1);
+      will-change: transform;
+    }
+    .page {
+      display: grid; place-items: center; height: 100vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .inner { text-align: center; padding-inline: var(--space-4); max-width: 72ch; }
+    .subtitle { font-size: clamp(.95rem, 2.6vw, 1.125rem); opacity: .85; }
+    .card {
+      display: inline-block; margin-top: var(--space-4); padding: var(--space-4) var(--space-5);
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-1);
+    }
+    .pager { position: fixed; right: max(16px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); display: grid; gap: 12px; z-index: 10; }
+    .pager button {
+      width: 54px; height: 54px; border-radius: 999px; border: 1px solid rgba(255,255,255,.24);
+      background: rgba(0,0,0,.35); color: #fff; backdrop-filter: blur(8px); cursor: pointer;
+      display: grid; place-items: center; font-size: 20px; transition: transform .2s ease, background .2s ease, opacity .2s ease;
+      box-shadow: var(--shadow-1);
+      touch-action: manipulation;
+    }
+    .pager button:hover { transform: translateY(-2px); background: rgba(0,0,0,.5); }
+    .pager button:active { transform: translateY(0); }
+    .pager button[aria-disabled="true"], .pager button:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+    .hint { position: absolute; bottom: calc(20px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: .8rem; opacity: .7; user-select: none; }
+    .btn-primary { background: var(--accent); color: #111; padding: 12px 20px; border-radius: 10px; font-weight: 700; border: none; box-shadow: 0 6px 18px rgba(247,201,72,.35); }
+ /* === Page 1 hero background === */
+    .page.hero {
+      background:
+        linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.55)),
+        url('page1-bg.png') center/cover no-repeat fixed;
+    }
+    .hero .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+      padding: 24px;
+    }
+    .hero .title {
+      font-weight: 900; text-transform: none; letter-spacing: -0.02em;
+      text-shadow: 0 2px 12px rgba(0,0,0,.55), 0 0 1px rgba(0,0,0,.6);
+    }
+    .hero .subtitle {
+      margin-top: 8px; opacity: .95; font-size: clamp(1rem, 2.4vw, 1.3rem);
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    @media (max-width: 768px) {
+      .pager { right: max(10px, env(safe-area-inset-right)); gap: 10px; }
+      .pager button { width: 56px; height: 56px; font-size: 22px; }
+      .inner { padding-inline: var(--space-3); }
+    }
+    @media (max-width: 420px) {
+      .pager { right: max(8px, env(safe-area-inset-right)); }
+      .pager button { width: 60px; height: 60px; font-size: 24px; }
+      .hint { font-size: .78rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { .pages { transition: none; } .pager button { transition: none; } }
+
+    /* === Scoped minimal styles for the AI UI (index3) === */
+    .ai { width: min(980px, 92vw); text-align: left; }
+    .ai header { padding: 16px 20px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.28); border-radius: 14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .ai header h1 { font-size: 1.1rem; margin: 0; font-weight: 650; }
+    .ai main { margin-top: 14px; display: grid; gap: 16px; }
+    .ai .row { display: grid; gap: 10px; grid-template-columns: 1fr auto auto; align-items: end; }
+    .ai textarea { width: 100%; min-height: 56px; resize: vertical; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.05); color: var(--neutral-0); font: inherit; }
+    .ai button { padding: 10px 14px; border-radius: 10px; border: 1px solid transparent; background: #0a66ff; color: white; font-weight: 600; cursor: pointer; }
+    .ai button.secondary { background: rgba(255,255,255,.12); color: var(--neutral-0); border-color: rgba(255,255,255,.18); }
+    .ai button:disabled { opacity: .6; cursor: not-allowed; }
+    .ai .status { font-size: .9rem; color: #e5e7eb; }
+    .ai .log, .ai .chat { border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 12px; background: rgba(0,0,0,.25); }
+    .ai .chat { min-height: 160px; white-space: pre-wrap; }
+    .ai .kv { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: .9rem; }
+    .ai .pill { display:inline-block; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.12); margin-right: 6px; margin-bottom: 6px; }
+    .ai .hidden { display: none; }
+    .ai .small { font-size: .85rem; color: #c7d2fe; }
+
+    /* Keep AI section scrollable within page two */
+    .ai-scroll { max-height: 70vh; overflow: auto; padding-right: 4px; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="pager" aria-label="Page navigation">
+      <button id="btnUp" aria-label="Go to previous page" title="Up (↑)">↑</button>
+      <button id="btnDown" aria-label="Go to next page" title="Down (↓)">↓</button>
+    </div>
+
+    <div class="pages" id="pages" style="transform: translateY(0);">
+      <!-- Page 1 (unchanged) -->
+      <!-- Page 1 with background + centered title -->
+      <section class="page hero" aria-label="Page 1">
+        <div class="overlay" aria-hidden="false">
+          <div>
+            <h1 class="title">AI-WASM-Tiny-World-POC-GTFO</h1>
+            <p class="subtitle"> Have fun. PageDown ↓</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Page 2 now hosts the WebGPU demo UI -->
+      <section class="page" aria-label="Page 2">
+        <div class="inner" style="max-width: 1100px;">
+          <h2 style="margin-bottom: 8px;">Page Two · IBM Granite 4.0 Micro (WebGPU)</h2>
+          <p class="subtitle">Browser‑only small AI model demo running on your GPU.</p>
+
+          <div class="ai ai-scroll" id="ai-app" onwheel="event.stopPropagation();" ontouchmove="event.stopPropagation();">
+            <header>
+              <h1>IBM Granite 4.0 Micro (WebGPU)</h1>
+              <span id="gpuFlag" class="pill">Detecting GPU…</span>
+              <span id="shaderFlag" class="pill hidden">shader‑f16</span>
+              <span id="readyFlag" class="pill hidden">Model ready</span>
+            </header>
+
+            <main>
+              <div class="status" id="status">Status: idle</div>
+
+              <div class="row">
+                <textarea id="prompt" placeholder="Ask something… (e.g., 'Give me three tips for time management')"></textarea>
+                <button id="loadBtn" title="Load IBM Granite model (~2.3 GB over the network)">Load model</button>
+                <button id="runBtn" disabled>Ask</button>
+              </div>
+
+              <div>
+                <button class="secondary" id="gpuBtn">GPU stats</button>
+                <button class="secondary" id="resetBtn" disabled>Reset session</button>
+              </div>
+
+              <div class="chat" id="chat">(output will stream here)</div>
+              <div class="log kv" id="log"></div>
+
+              <details>
+                <summary>Notes</summary>
+                <ul>
+                  <li>Everything runs 100% in your browser via <strong>WebGPU</strong>. No server calls.</li>
+                  <li>Click <em>Load model</em> once; first load compiles GPU shaders (cold start). Subsequent prompts will be faster.</li>
+                  <li>The <em>GPU stats</em> button shows adapter features/limits and WebGL renderer info. Browsers do <em>not</em> expose live VRAM usage for security/privacy reasons.</li>
+                </ul>
+              </details>
+            </main>
+
+            <footer class="small">Model: <code>onnx-community/granite-4.0-micro-ONNX-web</code> · Powered by <code>@huggingface/transformers</code> (WebGPU)</footer>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- SPA pager logic (from template) -->
+  <script>
+    (function() {
+      const pagesEl = document.getElementById('pages');
+      const btnUp = document.getElementById('btnUp');
+      const btnDown = document.getElementById('btnDown');
+
+      let index = 0;
+      let isAnimating = false;
+      let lastGestureAt = 0;
+      const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+      function updateUI() {
+        const y = index * -100;
+        pagesEl.style.transform = `translateY(${y}vh)`;
+        const atTop = index === 0;
+        const atBottom = index === 1;
+        btnUp.toggleAttribute('disabled', atTop);
+        btnUp.setAttribute('aria-disabled', String(atTop));
+        btnDown.toggleAttribute('disabled', atBottom);
+        btnDown.setAttribute('aria-disabled', String(atBottom));
+      }
+
+      function goTo(nextIndex) {
+        index = clamp(nextIndex, 0, 1);
+        isAnimating = true;
+        updateUI();
+        setTimeout(() => { isAnimating = false; }, 650);
+      }
+
+      function step(dir) {
+        const now = Date.now();
+        if (isAnimating || (now - lastGestureAt) < 650) return;
+        lastGestureAt = now;
+        goTo(index + dir);
+      }
+
+      btnUp.addEventListener('click', () => step(-1));
+      btnDown.addEventListener('click', () => step(1));
+
+      // Wheel navigation, but ignore if the target is inside the AI app's scroll area
+      window.addEventListener('wheel', (e) => {
+        if (document.getElementById('ai-app')?.contains(e.target)) return;
+        const threshold = 10;
+        if (Math.abs(e.deltaY) < threshold) return;
+        step(e.deltaY > 0 ? 1 : -1);
+      }, { passive: true });
+
+      window.addEventListener('keydown', (e) => {
+        // Avoid hijacking when focusing on the prompt textarea
+        const active = document.activeElement;
+        if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.isContentEditable)) return;
+        const k = e.key;
+        if (["ArrowDown", "PageDown", " ", "Spacebar"].includes(k)) { e.preventDefault(); step(1); }
+        if (["ArrowUp", "PageUp"].includes(k)) { e.preventDefault(); step(-1); }
+        if (k === 'Home') { e.preventDefault(); goTo(0); }
+        if (k === 'End')  { e.preventDefault(); goTo(1); }
+      });
+
+      // Touch (vertical swipe) – ignore swipes that start inside the AI app
+      let touchStartY = 0, touchFromAI = false;
+      window.addEventListener('touchstart', (e) => {
+        const t = e.touches?.[0];
+        if (!t) return;
+        touchFromAI = document.getElementById('ai-app')?.contains(e.target) || false;
+        touchStartY = t.clientY;
+      }, { passive: true });
+
+      window.addEventListener('touchend', (e) => {
+        if (touchFromAI) return;
+        const touch = e.changedTouches && e.changedTouches[0];
+        if (!touch) return;
+        const deltaY = touchStartY - touch.clientY;
+        const swipeThreshold = 40;
+        if (Math.abs(deltaY) < swipeThreshold) return;
+        step(deltaY > 0 ? 1 : -1);
+      }, { passive: true });
+
+      updateUI();
+    })();
+  </script>
+
+  <!-- WebGPU AI demo (index3 script) -->
+  <script type="module">
+    // === UI elements ===
+    const promptEl = document.getElementById('prompt');
+    const loadBtn = document.getElementById('loadBtn');
+    const runBtn = document.getElementById('runBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const chatEl = document.getElementById('chat');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const gpuBtn = document.getElementById('gpuBtn');
+    const gpuFlag = document.getElementById('gpuFlag');
+    const shaderFlag = document.getElementById('shaderFlag');
+    const readyFlag = document.getElementById('readyFlag');
+
+    // === Feature detection (WebGPU + shader-f16) ===
+    async function detectWebGPU() {
+      if (!('gpu' in navigator)) {
+        gpuFlag.textContent = 'WebGPU: not supported';
+        gpuFlag.style.background = '#ffe1e1';
+        return { supported: false };
+      }
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) throw new Error('No adapter');
+        gpuFlag.textContent = 'WebGPU: supported';
+        gpuFlag.style.background = '#e6f4ff';
+        if (adapter.features.has('shader-f16')) {
+          shaderFlag.classList.remove('hidden');
+        }
+        return { supported: true };
+      } catch (e) {
+        gpuFlag.textContent = 'WebGPU: unavailable';
+        gpuFlag.style.background = '#ffe1e1';
+        return { supported: false };
+      }
+    }
+
+    // === Minimal worker (inline via Blob for single-file app) ===
+    const WORKER_SRC = `
+      import { AutoTokenizer, AutoModelForCausalLM, TextStreamer, InterruptableStoppingCriteria, env }
+        from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
+
+      env.allowRemoteModels = true;
+      env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
+
+      const MODEL_ID = 'onnx-community/granite-4.0-micro-ONNX-web';
+      const stopping = new InterruptableStoppingCriteria();
+      let tokenizer, model, past_key_values = null;
+
+      async function check() {
+        try {
+          const adapter = await navigator.gpu?.requestAdapter();
+          if (!adapter) throw new Error('WebGPU is not supported (no adapter found)');
+          if (!adapter.features.has('shader-f16')) {
+            postMessage({ status: 'loading', data: 'Warning: shader-f16 not supported; performance may be reduced.' });
+          }
+        } catch (err) {
+          postMessage({ status: 'error', data: String(err) });
+        }
+      }
+
+      async function load() {
+        postMessage({ status: 'loading', data: 'Loading IBM Granite model… (~2.3 GB)'});
+        tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID, { progress_callback: (x) => postMessage(x) });
+        model = await AutoModelForCausalLM.from_pretrained(MODEL_ID, {
+          device: 'webgpu',
+          progress_callback: (x) => postMessage(x)
+        });
+        postMessage({ status: 'loading', data: 'Compiling shaders & warming up…' });
+        const warm = tokenizer('hello');
+        await model.generate({ ...warm, max_new_tokens: 1 });
+        postMessage({ status: 'ready' });
+      }
+
+      async function generate(messages) {
+        const inputs = tokenizer.apply_chat_template(messages, { add_generation_prompt: true, return_dict: true });
+        let t0, numTokens = 0, tps;
+        function token_callback_function() { t0 ??= performance.now(); if (++numTokens > 0) tps = (numTokens / (performance.now() - t0)) * 1000; }
+        const streamer = new TextStreamer(tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: (out) => postMessage({ status: 'update', output: out, tps, numTokens }), token_callback_function });
+        postMessage({ status: 'start' });
+        const { sequences, past_key_values: pkv } = await model.generate({
+          ...inputs,
+          past_key_values: past_key_values,
+          max_new_tokens: 512,
+          streamer,
+          stopping_criteria: stopping,
+          return_dict_in_generate: true,
+        });
+        past_key_values = pkv;
+        const decoded = tokenizer.batch_decode(sequences, { skip_special_tokens: true });
+        postMessage({ status: 'complete', output: decoded });
+      }
+
+      addEventListener('message', async (e) => {
+        const { type, data } = e.data || {};
+        try {
+          if (type === 'check') return check();
+          if (type === 'load') return load();
+          if (type === 'generate') { stopping.reset(); return generate(data); }
+          if (type === 'interrupt') return stopping.interrupt();
+          if (type === 'reset') { past_key_values = null; stopping.reset(); }
+        } catch (err) { postMessage({ status: 'error', data: (err && err.message) ? String(err.message) : String(err) }); }
+      });
+    `;
+
+    const worker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })), { type: 'module' });
+
+    worker.addEventListener('message', (e) => {
+      const m = e.data || {};
+      switch (m.status) {
+        case 'loading': statusEl.textContent = 'Status: ' + m.data; break;
+        case 'initiate':
+        case 'progress':
+          logEl.textContent = JSON.stringify({ file: m.file, progress: m.progress, total: m.total }, null, 2);
+          break;
+        case 'ready':
+          statusEl.textContent = 'Status: model ready';
+          readyFlag.classList.remove('hidden');
+          runBtn.disabled = false;
+          loadBtn.disabled = true;
+          resetBtn.disabled = false;
+          break;
+        case 'start':
+          statusEl.textContent = 'Status: generating...';
+          chatEl.textContent += (chatEl.textContent ? "\n\n" : '') + 'Assistant: ';
+          runBtn.disabled = true;
+          break;
+        case 'update':
+          chatEl.textContent += m.output;
+          break;
+        case 'complete':
+          statusEl.textContent = 'Status: idle';
+          runBtn.disabled = false;
+          if (Array.isArray(m.output)) {
+            const last = String(m.output.at(-1) ?? '');
+            if (!chatEl.textContent.endsWith(last)) chatEl.textContent += last;
+          }
+          break;
+        case 'error':
+          statusEl.textContent = 'Status: error';
+          alert('Error: ' + m.data);
+          runBtn.disabled = false;
+          break;
+      }
+    });
+
+    // UI handlers
+    document.getElementById('loadBtn').addEventListener('click', () => worker.postMessage({ type: 'load' }));
+    document.getElementById('runBtn').addEventListener('click', () => {
+      const msg = promptEl.value.trim();
+      if (!msg) return;
+      chatEl.textContent += (chatEl.textContent ? "\n\n" : '') + 'You: ' + msg + "\n";
+      worker.postMessage({ type: 'generate', data: [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: msg }
+      ]});
+    });
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      worker.postMessage({ type: 'reset' });
+      chatEl.textContent = '';
+      logEl.textContent = '';
+    });
+    document.getElementById('gpuBtn').addEventListener('click', async () => {
+      const stats = await collectGpuStats();
+      alert('GPU stats (approx):\n\n' + JSON.stringify(stats, null, 2));
+    });
+
+    async function collectGpuStats() {
+      const out = { webgpu: {}, webgl: {}, system: {} };
+      if ('gpu' in navigator) {
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (adapter) {
+            out.webgpu.supported = true;
+            if (adapter.requestAdapterInfo) {
+              try { out.webgpu.info = await adapter.requestAdapterInfo(); } catch {}
+            }
+            out.webgpu.features = Array.from(adapter.features.values());
+            out.webgpu.limits = Object.fromEntries(Object.entries(adapter.limits));
+          }
+        } catch {}
+      } else {
+        out.webgpu.supported = false;
+      }
+      try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          out.webgl.version = gl.getParameter(gl.VERSION);
+          out.webgl.shadingLanguage = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+          out.webgl.vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+          out.webgl.renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+          out.webgl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+          out.webgl.maxCombinedTextureImageUnits = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+        }
+      } catch {}
+      out.system.deviceMemoryGB = navigator.deviceMemory || null;
+      out.system.hardwareConcurrency = navigator.hardwareConcurrency || null;
+      return out;
+    }
+
+    (async () => {
+      await detectWebGPU();
+      worker.postMessage({ type: 'check' });
+    })();
+  </script>
+</body>
+</html>
