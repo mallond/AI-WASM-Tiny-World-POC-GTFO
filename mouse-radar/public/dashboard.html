@@ -1,0 +1,89 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Mouse Radar — Dashboard</title>
+<style>
+  html,body { margin:0; height:100%; background:#0b0e14; color:#e6e6e6; }
+  #hud { position:fixed; top:10px; left:10px; background:#111a; padding:8px 12px; border-radius:10px; font:14px ui-sans-serif, system-ui; }
+  #legend { position:fixed; bottom:10px; left:10px; background:#111a; padding:8px 12px; border-radius:10px; max-width: 40vw; font:12px ui-sans-serif; }
+  canvas { display:block; width:100vw; height:100vh; }
+  code { background:#0006; padding:2px 4px; border-radius:4px; }
+</style>
+<div id="hud">connecting…</div>
+<div id="legend"></div>
+<canvas id="c"></canvas>
+<script type="module">
+  const BASE = ''; // same-origin. If your API is elsewhere, set to 'https://your-ngrok.ngrok.io'
+  const room = new URLSearchParams(location.search).get('room') || 'default';
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR = devicePixelRatio || 1;
+  function resize() { W = innerWidth; H = innerHeight; canvas.width = W*DPR; canvas.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+  addEventListener('resize', resize); resize();
+
+  const colors = new Map(); // sessionId -> color
+  const paths = new Map();  // sessionId -> points
+  function colorFor(id) {
+    if (!colors.has(id)) {
+      let h=0; for (let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
+      colors.set(id, `hsl(${h % 360} 80% 60%)`);
+      renderLegend();
+    }
+    return colors.get(id);
+  }
+
+  function addPoints(sessionId, points) {
+    const arr = paths.get(sessionId) || [];
+    for (const p of points) {
+      const x = (p.x / p.vw) * W;
+      const y = (p.y / p.vh) * H;
+      arr.push({ x, y, t: p.t });
+    }
+    while (arr.length > 800) arr.shift();
+    paths.set(sessionId, arr);
+  }
+
+  function draw() {
+    ctx.fillStyle = 'rgba(11,14,20,0.08)';
+    ctx.fillRect(0,0,W,H);
+    for (const [id, pts] of paths) {
+      if (pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = colorFor(id);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      const head = pts[pts.length-1];
+      ctx.beginPath(); ctx.arc(head.x, head.y, 3.5, 0, Math.PI*2); ctx.fillStyle = colorFor(id); ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  function renderLegend() {
+    const el = document.getElementById('legend');
+    const items = [...colors.entries()].map(([id, col]) => `<span style="color:${col}">●</span> <code>${id.slice(0,8)}</code>`);
+    el.innerHTML = items.join(' &nbsp; ');
+  }
+
+  async function loopStats() {
+    try {
+      const r = await fetch(`${BASE}/mouse/stats?room=${encodeURIComponent(room)}`);
+      const s = await r.json();
+      document.getElementById('hud').textContent =
+        `room: ${s.room} | dashboards: ${s.viewers} | spies: ${s.activeSpies}`;
+    } catch {}
+    setTimeout(loopStats, 1500);
+  }
+  loopStats();
+
+  const es = new EventSource(`${BASE}/events/mouse?room=${encodeURIComponent(room)}`);
+  es.addEventListener('hello', () => document.getElementById('hud').textContent = 'connected…');
+  es.addEventListener('point', (e) => {
+    const { sessionId, points } = JSON.parse(e.data);
+    colorFor(sessionId);
+    addPoints(sessionId, points);
+  });
+  es.onerror = () => { /* browser will retry */ };
+</script>
