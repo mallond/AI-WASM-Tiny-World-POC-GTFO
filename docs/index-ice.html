@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ultra-Simple P2P Chat (WebRTC, single file)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2f; --ink:#e8efff; --muted:#aab7d4; --accent:#6aa6ff; --ok:#39d98a; --warn:#ffcc66; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink); background: radial-gradient(1200px 800px at 20% -10%, #1a2455 0, transparent 55%), var(--bg);
+      min-height: 100svh; display: grid; place-items: center; padding: 24px;
+    }
+    .app {
+      width: 100%; max-width: 920px; display: grid; gap: 16px;
+      grid-template-columns: 1.1fr .9fr; align-items: start;
+    }
+    @media (max-width: 900px) { .app { grid-template-columns: 1fr; } }
+    .card {
+      background: color-mix(in oklab, var(--panel) 92%, black 8%);
+      border: 1px solid color-mix(in oklab, #2a355e 70%, #000 30%);
+      border-radius: 16px; padding: 16px 16px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    h1 { margin: 0 0 6px; font-weight: 700; letter-spacing:.2px; }
+    p.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button, textarea, input[type="text"] {
+      border-radius: 12px; border: 1px solid #2a355e; background: #0e1530; color: var(--ink);
+      padding: 10px 12px; font: inherit;
+    }
+    button {
+      cursor: pointer; background: linear-gradient(180deg, #1b2b5f, #142149);
+      border: 1px solid #2a3b78; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+      transition: transform .02s ease, filter .2s ease, background .2s ease; user-select: none;
+    }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px); }
+    button.secondary { background: #0e1530; }
+    button.good { background: linear-gradient(180deg, #1e6041, #174f35); border-color: #2b7a56; }
+    button.warn { background: linear-gradient(180deg, #6a531c, #4c3b12); border-color: #7b641f; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    textarea { width: 100%; min-height: 140px; resize: vertical; }
+    small { color: var(--muted); }
+    .status-dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:8px; vertical-align:middle; }
+    .dot-disconnected { background:#999; }
+    .dot-connecting { background: var(--warn); }
+    .dot-connected { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+    .stack { display: grid; gap: 8px; }
+    .log {
+      height: 360px; overflow: auto; padding: 12px; border-radius: 12px; background: #0d142e; border: 1px solid #28325e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 14px;
+    }
+    .msg { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; max-width: 85%; width: fit-content; }
+    .me  { background: #163b85; margin-left: auto; }
+    .peer{ background: #173758; }
+    .chat-input { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .foot { display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:12px; margin-top: 6px;}
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .kbd { border:1px solid #2a355e; border-bottom-width:2px; padding:1px 6px; border-radius:6px; background:#0e1530; font-size:12px;}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="card">
+      <h1>Peer-to-Peer Chat</h1>
+      <p class="hint">
+        No servers, just WebRTC DataChannels. Share the “Local Description” text with your peer.
+        <br>One person creates an <span class="mono">offer</span>; the other sets it and creates an <span class="mono">answer</span>.
+      </p>
+
+      <div class="row">
+        <div><span id="statusDot" class="status-dot dot-disconnected"></span><strong id="statusText">Disconnected</strong></div>
+        <small>ICE: <span id="iceState" class="mono">new</span> • DTLS: <span id="dtlsState" class="mono">new</span></small>
+      </div>
+
+      <div class="stack" style="margin-top:10px">
+        <div class="row">
+          <button id="btnOffer">Create Offer</button>
+          <button id="btnCopyLocal" class="secondary">Copy Local</button>
+          <button id="btnSetRemote">Set Remote</button>
+          <button id="btnAnswer" disabled>Set Remote & Create Answer</button>
+          <button id="btnReset" class="warn">Reset</button>
+        </div>
+
+        <label><small>Local Description (send this to your peer)</small></label>
+        <textarea id="localSdp" readonly placeholder="Will appear after you create an offer or answer."></textarea>
+
+        <label><small>Remote Description (paste from your peer)</small></label>
+        <textarea id="remoteSdp" placeholder="Paste the blob you received, then click Set Remote (or Set Remote & Create Answer)."></textarea>
+
+        <div class="row">
+          <label class="row" title="Using a public STUN helps across NATs.">
+            <input type="checkbox" id="useStun" checked />
+            <small>Use public STUN (recommended)</small>
+          </label>
+          <small>Trickle ICE is disabled for simplicity—wait for gathering to finish.</small>
+        </div>
+      </div>
+
+      <hr style="border-color:#223; opacity:.4; margin:14px 0">
+
+      <div class="stack">
+        <div class="log" id="chatLog" aria-live="polite"></div>
+        <div class="chat-input">
+          <input id="chatInput" type="text" placeholder="Type a message…" maxlength="1000" />
+          <button id="btnSend" class="good" disabled>Send</button>
+        </div>
+        <div class="foot">
+          <div>
+            <span class="kbd">Tip</span> Use two browsers/devices. Flow:
+            <span class="mono">A: Create Offer → Copy → send to B →</span>
+            <span class="mono">B: Set Remote & Create Answer → Copy → send to A →</span>
+            <span class="mono">A: Paste & Set Remote</span>
+          </div>
+          <div><small>Single file • No deps</small></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h3 style="margin:0 0 8px">What’s happening?</h3>
+      <ol style="margin:0 0 10px 18px; color:var(--muted);">
+        <li>You generate an SDP “offer” that includes ICE candidates.</li>
+        <li>Your peer sets that as remote, then generates an “answer.”</li>
+        <li>You set their answer as your remote. When the data channel opens, you’re connected.</li>
+      </ol>
+      <p class="hint">If it won’t connect, try toggling STUN, or use the same network/VPN. Some strict NATs need a TURN server (not included here).</p>
+      <details>
+        <summary class="hint">Show debug</summary>
+        <pre id="debug" class="mono" style="font-size:12px; white-space:pre-wrap"></pre>
+      </details>
+    </aside>
+  </div>
+
+  <script>
+    // Minimal single-file WebRTC DataChannel chat with manual (copy/paste) signaling.
+    const el = id => document.getElementById(id);
+    const statusDot  = el('statusDot');
+    const statusText = el('statusText');
+    const iceState   = el('iceState');
+    const dtlsState  = el('dtlsState');
+    const localSdp   = el('localSdp');
+    const remoteSdp  = el('remoteSdp');
+    const useStun    = el('useStun');
+    const btnOffer   = el('btnOffer');
+    const btnCopy    = el('btnCopyLocal');
+    const btnSetRem  = el('btnSetRemote');
+    const btnAnswer  = el('btnAnswer');
+    const btnReset   = el('btnReset');
+    const btnSend    = el('btnSend');
+    const chatInput  = el('chatInput');
+    const chatLog    = el('chatLog');
+    const debug      = el('debug');
+
+    let pc, dc; // RTCPeerConnection and DataChannel
+    let isOfferer = false;
+
+    function logDebug(...args) {
+      debug.textContent += args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ') + '\n';
+    }
+
+    function setStatus(state) {
+      const map = {
+        disconnected: ['dot-disconnected', 'Disconnected'],
+        connecting:   ['dot-connecting',   'Connecting…'],
+        connected:    ['dot-connected',    'Connected'],
+      };
+      for (const cls of ['dot-disconnected','dot-connecting','dot-connected']) statusDot.classList.remove(cls);
+      statusDot.classList.add(map[state][0]);
+      statusText.textContent = map[state][1];
+    }
+
+    function appendMsg(text, mine = false) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (mine ? 'me' : 'peer');
+      div.textContent = text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function setUIConnected(on) {
+      btnSend.disabled = !on;
+      chatInput.disabled = !on;
+      setStatus(on ? 'connected' : 'connecting');
+    }
+
+    function setUIDisconnected() {
+      btnSend.disabled = true;
+      setStatus('disconnected');
+      dtlsState.textContent = 'closed';
+    }
+
+    function makePC() {
+      const iceServers = useStun.checked ? [{urls: ['stun:stun.l.google.com:19302','stun:global.stun.twilio.com:3478']}] : [];
+      pc = new RTCPeerConnection({iceServers});
+      pc.onicegatheringstatechange = () => { iceState.textContent = pc.iceGatheringState; };
+      pc.oniceconnectionstatechange = () => {
+        logDebug('iceConnectionState:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') setUIDisconnected();
+      };
+      pc.ondtlsstatechange = () => { dtlsState.textContent = pc.dtlsTransport?.state || 'new'; };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') setStatus('connected');
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') setUIDisconnected();
+      };
+      pc.ondatachannel = ev => {
+        dc = ev.channel;
+        wireDC();
+      };
+    }
+
+    function wireDC() {
+      dc.onopen = () => { setUIConnected(true); appendMsg('Connected! 🎉', false); };
+      dc.onclose = () => setUIDisconnected();
+      dc.onerror = e => logDebug('DataChannel error', e);
+      dc.onmessage = ev => appendMsg(String(ev.data), false);
+    }
+
+    async function waitIceComplete() {
+      if (!pc) return;
+      if (pc.iceGatheringState === 'complete') return;
+      await new Promise(resolve => {
+        const check = () => pc.iceGatheringState === 'complete' && (pc.removeEventListener('icegatheringstatechange', check), resolve());
+        pc.addEventListener('icegatheringstatechange', check);
+        setTimeout(resolve, 4000); // safety timeout
+      });
+    }
+
+    function sdpToBlob(desc) { return JSON.stringify(desc); }
+    function blobToSdp(text) {
+      const obj = JSON.parse(text);
+      if (!obj || !obj.type || !obj.sdp) throw new Error('Invalid description');
+      return new RTCSessionDescription(obj);
+    }
+
+    async function createOffer() {
+      reset(false);
+      isOfferer = true;
+      makePC();
+      dc = pc.createDataChannel('chat', {ordered: true});
+      wireDC();
+      setStatus('connecting');
+
+      const offer = await pc.createOffer({offerToReceiveAudio: false, offerToReceiveVideo: false});
+      await pc.setLocalDescription(offer);
+      await waitIceComplete(); // gather ICE into SDP (no trickle)
+
+      localSdp.value = sdpToBlob(pc.localDescription);
+      btnAnswer.disabled = true;
+      appendMsg('Offer created. Send the Local Description to your peer.', false);
+    }
+
+    async function setRemote() {
+      if (!pc) makePC();
+      const text = remoteSdp.value.trim();
+      if (!text) return alert('Paste your peer’s description into "Remote Description" first.');
+      const remote = blobToSdp(text);
+      await pc.setRemoteDescription(remote);
+
+      // If we are the answerer (we just set a remote offer), enable combined action; else we're the offerer setting the answer.
+      if (remote.type === 'offer') {
+        btnAnswer.disabled = false;
+        appendMsg('Remote offer set. Ready to create answer.', false);
+      } else {
+        appendMsg('Remote answer set. Waiting for channel…', false);
+      }
+    }
+
+    async function makeAnswer() {
+      if (!pc || !pc.remoteDescription) return alert('Set the remote offer first.');
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await waitIceComplete();
+      localSdp.value = sdpToBlob(pc.localDescription);
+      appendMsg('Answer created. Send the Local Description back to the offerer.', false);
+    }
+
+    function sendMsg() {
+      const text = chatInput.value.trim();
+      if (!text || !dc || dc.readyState !== 'open') return;
+      dc.send(text);
+      appendMsg(text, true);
+      chatInput.value = '';
+      chatInput.focus();
+    }
+
+    async function copyLocal() {
+      if (!localSdp.value) return;
+      try {
+        await navigator.clipboard.writeText(localSdp.value);
+      } catch {
+        localSdp.select(); document.execCommand('copy');
+      }
+    }
+
+    function reset(hard = true) {
+      btnSend.disabled = true;
+      if (dc) { try { dc.close(); } catch {} dc = null; }
+      if (pc) { try { pc.close(); } catch {} pc = null; }
+      if (hard) {
+        localSdp.value = '';
+        remoteSdp.value = '';
+      }
+      setUIDisconnected();
+      iceState.textContent  = 'new';
+      dtlsState.textContent = 'new';
+      isOfferer = false;
+    }
+
+    // Wire UI
+    btnOffer.onclick  = createOffer;
+    btnSetRem.onclick = setRemote;
+    btnAnswer.onclick = async () => { await setRemote(); await makeAnswer(); };
+    btnCopy.onclick   = copyLocal;
+    btnReset.onclick  = () => reset(true);
+    btnSend.onclick   = sendMsg;
+    chatInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+    });
+
+    // Start clean
+    reset(true);
+  </script>
+</body>
+</html>

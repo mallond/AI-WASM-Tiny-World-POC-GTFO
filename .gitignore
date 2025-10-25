@@ -9,4 +9,5 @@ id_*
 config.local.*
 secret
 *.enc
+*ZoneIdentifier*
 
