@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SPA + DuckDB-WASM (Page Three Prototype)</title>
+  <style>
+    :root {
+      --fs-body: 1rem;
+      --lh-body: 1.5;
+      --fs-h1: 3.2rem;
+      --fs-h2: 2.2rem;
+      --space-2: 16px;
+      --space-3: 24px;
+      --space-4: 32px;
+      --neutral-0: #ffffff;
+      --surface: #0f172a;
+      --surface-2: #111827;
+      --radius-lg: 14px;
+      --shadow-1: 0 6px 24px rgba(0,0,0,.25);
+      --accent: #10b981;
+    }
+    html, body { height: 100%; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 400 var(--fs-body)/var(--lh-body) system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--neutral-0);
+      background: linear-gradient(180deg, var(--surface), var(--surface-2) 60%);
+      overflow: hidden;
+    }
+    h1 { font-size: clamp(2.2rem, 4.5vw, var(--fs-h1)); margin: 0 0 var(--space-2); }
+    h2 { font-size: clamp(1.6rem, 3.5vw, var(--fs-h2)); margin: 0 0 10px; }
+    p { margin: 0; opacity: .9; }
+    .app { position: relative; width: 100vw; height: 100vh; }
+    .pages { position: absolute; inset: 0; display: grid; grid-auto-flow: row; grid-template-rows: 100vh 100vh 100vh; transition: transform 600ms cubic-bezier(.22,1,.36,1); will-change: transform; }
+    .page { display: grid; place-items: center; height: 100vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    .inner { text-align: center; padding-inline: var(--space-4); max-width: 72ch; }
+    .pager { position: fixed; right: max(16px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); display: grid; gap: 12px; z-index: 10; }
+    .pager button { width: 54px; height: 54px; border-radius: 999px; border: 1px solid rgba(255,255,255,.24); background: rgba(0,0,0,.35); color: #fff; backdrop-filter: blur(8px); cursor: pointer; display: grid; place-items: center; font-size: 20px; box-shadow: var(--shadow-1); }
+    .pager button[aria-disabled="true"], .pager button:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+    .subtitle { opacity: .9; }
+    /* Page 3 (DuckDB) */
+    .db { width: min(1100px, 94vw); text-align: left; }
+    .db header { padding: 12px 16px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.28); border-radius: 14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .db header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; }
+    .db main { margin-top: 14px; display: grid; gap: 12px; }
+    .db .row { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0,1fr)); align-items: end; }
+    .db input, .db textarea, .db select {
+      width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.05); color: var(--neutral-0); font: inherit;
+    }
+    .db button { padding: 10px 14px; border-radius: 10px; border: 1px solid transparent; background: var(--accent); color: white; font-weight: 600; cursor: pointer; }
+    .db button.secondary { background: rgba(255,255,255,.12); color: var(--neutral-0); border-color: rgba(255,255,255,.18); }
+    .db .results { border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 12px; background: rgba(0,0,0,.25); min-height: 100px; overflow:auto; }
+    .db table { border-collapse: collapse; width: 100%; }
+    .db th, .db td { border-bottom: 1px solid rgba(255,255,255,.12); padding: 8px 10px; text-align: left; }
+    .pill { display:inline-block; padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.12); margin-right: 6px; margin-bottom: 6px; }
+    .db-scroll { max-height: 70vh; overflow: auto; padding-right: 4px; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="pager" aria-label="Page navigation">
+      <button id="btnUp" aria-label="Go to previous page" title="Up (↑)">↑</button>
+      <button id="btnDown" aria-label="Go to next page" title="Down (↓)">↓</button>
+    </div>
+
+    <div class="pages" id="pages" style="transform: translateY(0);">
+      <!-- Page 1 -->
+      <section class="page" aria-label="Page 1">
+        <div class="inner">
+          <h1>Page One</h1>
+          <p class="subtitle">Scroll or use ↑/↓ to navigate.</p>
+        </div>
+      </section>
+
+      <!-- Page 2 -->
+      <section class="page" aria-label="Page 2">
+        <div class="inner">
+          <h2>Page Two</h2>
+          <p class="subtitle">Placeholder page.</p>
+        </div>
+      </section>
+
+      <!-- Page 3 (DuckDB) -->
+      <section class="page" aria-label="Page 3">
+        <div class="inner" style="max-width: 1200px;">
+          <h2 style="margin-bottom: 8px;">Page Three · DuckDB-WASM (In-Browser DB)</h2>
+          <p class="subtitle">Init DB → Add Row → Run SQL. No server required.</p>
+
+          <div class="db db-scroll" id="db-app" onwheel="event.stopPropagation();" ontouchmove="event.stopPropagation();">
+            <header>
+              <h1>DuckDB (WASM)</h1>
+              <span id="dbFlag" class="pill">DB: not initialized</span>
+              <button id="dbInitBtn" class="secondary" title="Instantiate DuckDB in the browser">Init DB</button>
+            </header>
+
+            <main>
+              <!-- Insert panel -->
+              <div class="row">
+                <div>
+                  <label for="name">Name</label>
+                  <input id="name" placeholder="e.g., Ada Lovelace" />
+                </div>
+                <div>
+                  <label for="age">Age</label>
+                  <input id="age" type="number" min="0" step="1" placeholder="e.g., 36" />
+                </div>
+                <div>
+                  <label for="city">City</label>
+                  <input id="city" placeholder="e.g., London" />
+                </div>
+                <div>
+                  <button id="addRowBtn" disabled>Add Row</button>
+                </div>
+              </div>
+
+              <!-- SQL console -->
+              <div>
+                <label for="sql" style="display:block; margin: 8px 0 6px;">SQL</label>
+                <textarea id="sql" placeholder="SELECT * FROM people LIMIT 10;" style="min-height: 120px;"></textarea>
+                <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                  <button id="runSqlBtn" disabled>Run SQL</button>
+                  <!-- Removed Create Table -->
+                  <button id="dropTblBtn" class="secondary" disabled>Drop Table</button>
+                </div>
+              </div>
+
+              <div class="results" id="results">(results will appear here)</div>
+            </main>
+
+            <footer class="subtitle" style="font-size:.9rem; opacity:.75;">Powered by <code>@duckdb/duckdb-wasm</code> + <code>apache-arrow</code></footer>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Simple pager logic -->
+  <script>
+    (function() {
+      const pagesEl = document.getElementById('pages');
+      const btnUp = document.getElementById('btnUp');
+      const btnDown = document.getElementById('btnDown');
+
+      let index = 0;
+      let isAnimating = false;
+      let lastGestureAt = 0;
+      const MAX_INDEX = 2; // 0..2
+      const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+      function updateUI() {
+        pagesEl.style.transform = `translateY(${index * -100}vh)`;
+        const atTop = index === 0;
+        const atBottom = index === MAX_INDEX;
+        btnUp.toggleAttribute('disabled', atTop);
+        btnUp.setAttribute('aria-disabled', String(atTop));
+        btnDown.toggleAttribute('disabled', atBottom);
+        btnDown.setAttribute('aria-disabled', String(atBottom));
+      }
+      function goTo(nextIndex) {
+        index = clamp(nextIndex, 0, MAX_INDEX);
+        isAnimating = true;
+        updateUI();
+        setTimeout(() => { isAnimating = false; }, 650);
+      }
+      function step(dir) {
+        const now = Date.now();
+        if (isAnimating || (now - lastGestureAt) < 650) return;
+        lastGestureAt = now;
+        goTo(index + dir);
+      }
+      btnUp.addEventListener('click', () => step(-1));
+      btnDown.addEventListener('click', () => step(1));
+      window.addEventListener('wheel', (e) => {
+        if (document.getElementById('db-app')?.contains(e.target)) return;
+        const threshold = 10;
+        if (Math.abs(e.deltaY) < threshold) return;
+        step(e.deltaY > 0 ? 1 : -1);
+      }, { passive: true });
+      window.addEventListener('keydown', (e) => {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.isContentEditable)) return;
+        const k = e.key;
+        if (["ArrowDown", "PageDown", " ", "Spacebar"].includes(k)) { e.preventDefault(); step(1); }
+        if (["ArrowUp", "PageUp"].includes(k))   { e.preventDefault(); step(-1); }
+        if (k === 'Home') { e.preventDefault(); goTo(0); }
+        if (k === 'End')  { e.preventDefault(); goTo(MAX_INDEX); }
+      });
+      updateUI();
+    })();
+  </script>
+
+  <!-- Page 3: DuckDB-WASM -->
+  <script type="module">
+    // ESM imports
+    import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.0/+esm';
+    import { tableFromIPC } from 'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.2/+esm';
+
+    // DOM helpers & lookups
+    const get = (id) => {
+      const el = document.getElementById(id);
+      if (!el) throw new Error('#' + id + ' not found');
+      return el;
+    };
+    const dbInitBtn   = get('dbInitBtn');
+    const dbFlag      = get('dbFlag');
+    const addRowBtn   = get('addRowBtn');
+    const dropTblBtn  = get('dropTblBtn');
+    const runSqlBtn   = get('runSqlBtn');
+    const nameEl      = get('name');
+    const ageEl       = get('age');
+    const cityEl      = get('city');
+    const sqlEl       = get('sql');
+    const resultsEl   = get('results');
+
+    let db = null;
+    let conn = null;
+
+    function setDbReady(ready) {
+      dbFlag.textContent = ready ? 'DB: ready' : 'DB: not initialized';
+      dbFlag.style.background = ready ? '#e6fbe6' : '';
+      addRowBtn.disabled = !ready;
+      dropTblBtn.disabled = !ready;
+      runSqlBtn.disabled = !ready;
+    }
+
+    function renderResults(rows) {
+      if (!rows || rows.length === 0) {
+        resultsEl.textContent = '(no rows)';
+        return;
+      }
+      const cols = Object.keys(rows[0]);
+      const thead = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${String(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      resultsEl.innerHTML = `<table>${thead}${tbody}</table>`;
+    }
+
+    // Robust Arrow → rows helper (handles Table or IPC bytes; guards non-SELECT)
+    async function queryRows(sql) {
+      const res = await conn.query(sql);
+      if (res == null) return []; // non-SELECT
+      let table;
+      if (typeof res === 'object' && res && 'schema' in res && 'numRows' in res && typeof res.getChildAt === 'function') {
+        table = res; // already an Arrow Table
+      } else if (res instanceof Uint8Array || res instanceof ArrayBuffer) {
+        table = tableFromIPC(res);
+      } else {
+        try { table = tableFromIPC(res); } catch { return []; }
+      }
+      const cols = table.schema.fields.map(f => f.name);
+      const rows = [];
+      for (let r = 0; r < table.numRows; r++) {
+        const obj = {};
+        for (let c = 0; c < cols.length; c++) obj[cols[c]] = table.getChildAt(c).get(r);
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    // Init DB (blob worker to avoid cross-origin worker restrictions) + auto create schema
+    dbInitBtn.addEventListener('click', async () => {
+      try {
+        dbFlag.textContent = 'DB: loading…';
+        const bundles = duckdb.getJsDelivrBundles();
+        const bundle = await duckdb.selectBundle(bundles);
+        const workerUrl = URL.createObjectURL(new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }));
+        const worker = new Worker(workerUrl);
+        const logger = new duckdb.ConsoleLogger();
+        db = new duckdb.AsyncDuckDB(logger, worker);
+        await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+        conn = await db.connect();
+
+        // Ensure sequence + table exist (portable across DuckDB versions)
+        await conn.query(`
+          CREATE SEQUENCE IF NOT EXISTS people_id_seq;
+          CREATE TABLE IF NOT EXISTS people (
+            id INTEGER PRIMARY KEY DEFAULT nextval('people_id_seq'),
+            name VARCHAR,
+            age INTEGER,
+            city VARCHAR
+          );
+        `);
+
+        setDbReady(true);
+        sqlEl.value = "SELECT * FROM people LIMIT 10;";
+        URL.revokeObjectURL(workerUrl);
+      } catch (err) {
+        alert('DuckDB init failed: ' + err);
+        setDbReady(false);
+        console.error(err);
+      }
+    });
+
+    // Drop table (for quick reset)
+    dropTblBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      try {
+        await conn.query('DROP TABLE IF EXISTS people;');
+        renderResults([{ info: 'people table dropped' }]);
+      } catch (e) {
+        resultsEl.textContent = 'Error dropping table: ' + e;
+      }
+    });
+
+    // Insert row (prepared statement)
+    addRowBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      const name = nameEl.value.trim();
+      const age  = Number.parseInt(ageEl.value, 10);
+      const city = cityEl.value.trim();
+      if (!name || !Number.isFinite(age) || !city) {
+        alert('Please fill name, age, and city.');
+        return;
+      }
+      try {
+        // guard schema (in case Drop was pressed)
+        await conn.query(`
+          CREATE SEQUENCE IF NOT EXISTS people_id_seq;
+          CREATE TABLE IF NOT EXISTS people (
+            id INTEGER PRIMARY KEY DEFAULT nextval('people_id_seq'),
+            name VARCHAR,
+            age INTEGER,
+            city VARCHAR
+          );
+        `);
+        const stmt = await conn.prepare('INSERT INTO people(name, age, city) VALUES (?, ?, ?);');
+        await stmt.query(name, age, city);
+        await stmt.close();
+        const rows = await queryRows('SELECT * FROM people ORDER BY id DESC LIMIT 10;');
+        renderResults(rows);
+        nameEl.value = ''; ageEl.value = ''; cityEl.value = '';
+        nameEl.focus();
+      } catch (e) {
+        resultsEl.textContent = 'Insert failed: ' + e;
+        console.error(e);
+      }
+    });
+
+    // Freeform SQL
+    runSqlBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      const sql = sqlEl.value.trim();
+      if (!sql) return;
+      try {
+        const rows = await queryRows(sql);
+        renderResults(rows);
+      } catch (e) {
+        resultsEl.textContent = 'SQL error: ' + e;
+        console.error(e);
+      }
+    });
+
+    // Enter key convenience
+    cityEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') addRowBtn.click(); });
+  </script>
+</body>
+</html>

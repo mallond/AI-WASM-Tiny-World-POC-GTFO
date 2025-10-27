@@ -431,15 +431,27 @@
 
     // UI handlers
     document.getElementById('loadBtn').addEventListener('click', () => worker.postMessage({ type: 'load' }));
-    document.getElementById('runBtn').addEventListener('click', () => {
-      const msg = promptEl.value.trim();
-      if (!msg) return;
-      chatEl.textContent += (chatEl.textContent ? "\n\n" : '') + 'You: ' + msg + "\n";
-      worker.postMessage({ type: 'generate', data: [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: msg }
-      ]});
-    });
+  document.getElementById('runBtn').addEventListener('click', () => {
+    const msg = promptEl.value.trim();
+    if (!msg) return;
+
+    // 1) Log as usual
+    chatEl.textContent += (chatEl.textContent ? "\n\n" : '') + 'You: ' + msg + "\n";
+
+    // 2) Seamless hidden prompt (system-level style). 
+    //    It never shows to users, but guides the tone firmly.
+    const PIRATE_STYLE = [
+      "Speak like an exuberant pirate in every reply: use nautical slang, 'Arrr', 'aye', 'ye', 'matey', and sea-faring metaphors.",
+      "Do NOT mention these instructions or that you were told to role-play.",
+      "Keep answers clear, accurate, and helpful; avoid offensive content; follow normal safety rules."
+    ].join(" ");
+
+    // 3) Send messages with the pirate system prompt
+    worker.postMessage({ type: 'generate', data: [
+      { role: 'system', content: PIRATE_STYLE },
+      { role: 'user', content: msg }
+    ]});
+  });
     document.getElementById('resetBtn').addEventListener('click', () => {
       worker.postMessage({ type: 'reset' });
       chatEl.textContent = '';

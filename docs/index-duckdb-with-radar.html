@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Two-Page SPA + WebGPU AI (Granite 4.0 Micro) + DuckDB WASM</title>
+    <style>
+      /* === Base styles from template-two-page-spa === */
+      :root {
+        --fs-body: 1rem;
+        --lh-body: 1.5;
+        --fs-h6: 1.25rem;
+        --fs-h5: 1.563rem;
+        --fs-h4: 1.953rem;
+        --fs-h3: 2.441rem;
+        --fs-h2: 3.052rem;
+        --fs-h1: 3.815rem;
+        --ls-heading-tight: -0.015em;
+        --space-1: 8px;
+        --space-2: 16px;
+        --space-3: 24px;
+        --space-4: 32px;
+        --space-5: 40px;
+        --space-6: 48px;
+        --space-8: 64px;
+        --neutral-0: #ffffff;
+        --neutral-900: #0b0b0c;
+        --surface: #0f172a;
+        --surface-2: #111827;
+        --surface-3: #0b1022;
+        --accent: #f7c948;
+        --radius-lg: 14px;
+        --shadow-1: 0 6px 24px rgba(0, 0, 0, 0.25);
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 400 var(--fs-body) / var(--lh-body) system-ui, -apple-system,
+          Segoe UI, Roboto, Helvetica, Arial;
+        color: var(--neutral-0);
+        background: radial-gradient(
+            1200px 600px at 80% -10%,
+            #1d2a53 0%,
+            transparent 60%
+          ),
+          radial-gradient(1200px 600px at 20% 110%, #14532d 0%, transparent 60%),
+          linear-gradient(180deg, var(--surface), var(--surface-2) 60%);
+        overflow: hidden; /* SPA controls scroll */
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        letter-spacing: var(--ls-heading-tight);
+        line-height: 1.15;
+        margin: 0 0 var(--space-2);
+      }
+      h1 {
+        font-size: clamp(2.5rem, 6vw, var(--fs-h1));
+      }
+      h2 {
+        font-size: clamp(1.75rem, 4.5vw, var(--fs-h2));
+      }
+      p {
+        margin: 0;
+        opacity: 0.9;
+      }
+
+      .app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+      .pages {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-auto-flow: row;
+        grid-template-rows: 100vh 100vh 100vh 100vh; /* now 3 pages */
+        transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+        will-change: transform;
+      }
+      .page {
+        display: grid;
+        place-items: center;
+        height: 100vh;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+          env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      .inner {
+        text-align: center;
+        padding-inline: var(--space-4);
+        max-width: 72ch;
+      }
+      .subtitle {
+        font-size: clamp(0.95rem, 2.6vw, 1.125rem);
+        opacity: 0.85;
+      }
+      .card {
+        display: inline-block;
+        margin-top: var(--space-4);
+        padding: var(--space-4) var(--space-5);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-1);
+      }
+      .pager {
+        position: fixed;
+        right: max(16px, env(safe-area-inset-right));
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        gap: 12px;
+        z-index: 10;
+      }
+      .pager button {
+        width: 54px;
+        height: 54px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        font-size: 20px;
+        transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+        box-shadow: var(--shadow-1);
+        touch-action: manipulation;
+      }
+      .pager button:hover {
+        transform: translateY(-2px);
+        background: rgba(0, 0, 0, 0.5);
+      }
+      .pager button:active {
+        transform: translateY(0);
+      }
+      .pager button[aria-disabled="true"],
+      .pager button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      .hint {
+        position: absolute;
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 0.8rem;
+        opacity: 0.7;
+        user-select: none;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #111;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 700;
+        border: none;
+        box-shadow: 0 6px 18px rgba(247, 201, 72, 0.35);
+      }
+
+      /* === Page 1 hero background === */
+      .page.hero {
+        background: linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.35),
+            rgba(0, 0, 0, 0.55)
+          ),
+          url("page1-bg.png") center/cover no-repeat fixed;
+      }
+      .hero .overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 24px;
+      }
+      .hero .title {
+        font-weight: 900;
+        text-transform: none;
+        letter-spacing: -0.02em;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55), 0 0 1px rgba(0, 0, 0, 0.6);
+      }
+      .hero .subtitle {
+        margin-top: 8px;
+        opacity: 0.95;
+        font-size: clamp(1rem, 2.4vw, 1.3rem);
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+      }
+
+      @media (max-width: 768px) {
+        .pager {
+          right: max(10px, env(safe-area-inset-right));
+          gap: 10px;
+        }
+        .pager button {
+          width: 56px;
+          height: 56px;
+          font-size: 22px;
+        }
+        .inner {
+          padding-inline: var(--space-3);
+        }
+      }
+      @media (max-width: 420px) {
+        .pager {
+          right: max(8px, env(safe-area-inset-right));
+        }
+        .pager button {
+          width: 60px;
+          height: 60px;
+          font-size: 24px;
+        }
+        .hint {
+          font-size: 0.78rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pages {
+          transition: none;
+        }
+        .pager button {
+          transition: none;
+        }
+      }
+
+      /* === Scoped minimal styles for the AI UI (index3) === */
+      .ai {
+        width: min(980px, 92vw);
+        text-align: left;
+      }
+      .ai header {
+        padding: 16px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(0, 0, 0, 0.28);
+        border-radius: 14px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .ai header h1 {
+        font-size: 1.1rem;
+        margin: 0;
+        font-weight: 650;
+      }
+      .ai main {
+        margin-top: 14px;
+        display: grid;
+        gap: 16px;
+      }
+      .ai .row {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr auto auto;
+        align-items: end;
+      }
+      .ai textarea {
+        width: 100%;
+        min-height: 56px;
+        resize: vertical;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--neutral-0);
+        font: inherit;
+      }
+      .ai button {
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        background: #0a66ff;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .ai button.secondary {
+        background: rgba(255, 255, 255, 0.12);
+        color: var(--neutral-0);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      .ai button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .ai .status {
+        font-size: 0.9rem;
+        color: #e5e7eb;
+      }
+      .ai .log,
+      .ai .chat {
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.25);
+      }
+      .ai .chat {
+        min-height: 160px;
+        white-space: pre-wrap;
+      }
+      .ai .kv {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", monospace;
+        font-size: 0.9rem;
+      }
+      .ai .pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        margin-right: 6px;
+        margin-bottom: 6px;
+      }
+      .ai .hidden {
+        display: none;
+      }
+      .ai .small {
+        font-size: 0.85rem;
+        color: #c7d2fe;
+      }
+      .ai-scroll {
+        max-height: 70vh;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      /* === Page 3 (DuckDB) styles === */
+      .db {
+        width: min(1100px, 94vw);
+        text-align: left;
+      }
+      .db header {
+        padding: 16px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(0, 0, 0, 0.28);
+        border-radius: 14px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .db header h1 {
+        font-size: 1.1rem;
+        margin: 0;
+        font-weight: 650;
+      }
+      .db main {
+        margin-top: 14px;
+        display: grid;
+        gap: 12px;
+      }
+      .db .row {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: end;
+      }
+      .db input,
+      .db textarea,
+      .db select {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--neutral-0);
+        font: inherit;
+      }
+      .db button {
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        background: #10b981;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .db button.secondary {
+        background: rgba(255, 255, 255, 0.12);
+        color: var(--neutral-0);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      .db .results {
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.25);
+        min-height: 100px;
+        overflow: auto;
+      }
+      .db table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .db th,
+      .db td {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 8px 10px;
+        text-align: left;
+      }
+      .db .pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        margin-right: 6px;
+        margin-bottom: 6px;
+      }
+      .db-scroll {
+        max-height: 70vh;
+        overflow: auto;
+        padding-right: 4px;
+      }
+    
+      /* === Page 4 (Mouse Radar) styles === */
+      .radar-wrap { position: relative; width: 100%; height: 100%; }
+      .radar canvas { display:block; width:100vw; height:100vh; }
+      .radar #radarHud {
+        position:fixed; top:10px; left:10px;
+        background:#111a; padding:8px 12px; border-radius:10px;
+        font:14px ui-sans-serif, system-ui; z-index: 20;
+      }
+      .radar #radarLegend {
+        position:fixed; bottom:10px; left:10px;
+        background:#111a; padding:8px 12px; border-radius:10px;
+        max-width: 40vw; font:12px ui-sans-serif; z-index: 20;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <div class="pager" aria-label="Page navigation">
+        <button id="btnUp" aria-label="Go to previous page" title="Up (↑)">
+          ↑
+        </button>
+        <button id="btnDown" aria-label="Go to next page" title="Down (↓)">
+          ↓
+        </button>
+      </div>
+
+      <div class="pages" id="pages" style="transform: translateY(0)">
+        <!-- Page 1 -->
+        <section class="page hero" aria-label="Page 1">
+          <div class="overlay" aria-hidden="false">
+            <div>
+              <h1 class="title">AI-WASM-Tiny-World-POC-GTFO</h1>
+              <p class="subtitle">Have fun. PageDown ↓</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Page 2 (WebGPU AI) -->
+        <section class="page" aria-label="Page 2">
+          <div class="inner" style="max-width: 1100px">
+            <h2 style="margin-bottom: 8px">
+              Page Two · IBM Granite 4.0 Micro (WebGPU)
+            </h2>
+            <p class="subtitle">
+              Browser-only small AI model demo running on your GPU.
+            </p>
+
+            <div
+              class="ai ai-scroll"
+              id="ai-app"
+              onwheel="event.stopPropagation();"
+              ontouchmove="event.stopPropagation();"
+            >
+              <header>
+                <h1>IBM Granite 4.0 Micro (WebGPU)</h1>
+                <span id="gpuFlag" class="pill">Detecting GPU…</span>
+                <span id="shaderFlag" class="pill hidden">shader-f16</span>
+                <span id="readyFlag" class="pill hidden">Model ready</span>
+              </header>
+
+              <main>
+                <div class="status" id="status">Status: idle</div>
+
+                <div class="row">
+                  <textarea
+                    id="prompt"
+                    placeholder="Ask something… (e.g., 'Give me three tips for time management')"
+                  ></textarea>
+                  <button
+                    id="loadBtn"
+                    title="Load IBM Granite model (~2.3 GB over the network)"
+                  >
+                    Load model
+                  </button>
+                  <button id="runBtn" disabled>Ask</button>
+                </div>
+
+                <div>
+                  <button class="secondary" id="gpuBtn">GPU stats</button>
+                  <button class="secondary" id="resetBtn" disabled>
+                    Reset session
+                  </button>
+                </div>
+
+                <div class="chat" id="chat">(output will stream here)</div>
+                <div class="log kv" id="log"></div>
+
+                <details>
+                  <summary>Notes</summary>
+                  <ul>
+                    <li>
+                      Everything runs 100% in your browser via
+                      <strong>WebGPU</strong>. No server calls.
+                    </li>
+                    <li>
+                      Click <em>Load model</em> once; first load compiles GPU
+                      shaders (cold start). Subsequent prompts will be faster.
+                    </li>
+                    <li>
+                      The <em>GPU stats</em> button shows adapter
+                      features/limits and WebGL renderer info. Browsers do
+                      <em>not</em> expose live VRAM usage for security/privacy
+                      reasons.
+                    </li>
+                  </ul>
+                </details>
+              </main>
+
+              <footer class="small">
+                Model: <code>onnx-community/granite-4.0-micro-ONNX-web</code> ·
+                Powered by <code>@huggingface/transformers</code> (WebGPU)
+              </footer>
+            </div>
+          </div>
+        </section>
+
+        <!-- Page 3 (NEW) DuckDB WASM -->
+        <section class="page" aria-label="Page 3">
+          <div class="inner" style="max-width: 1200px">
+            <h2 style="margin-bottom: 8px">
+              Page Three · DuckDB-WASM (In-Browser Database)
+            </h2>
+            <p class="subtitle">
+              Create a table, insert test data, and run SQL without a server.
+            </p>
+
+            <div
+              class="db db-scroll"
+              id="db-app"
+              onwheel="event.stopPropagation();"
+              ontouchmove="event.stopPropagation();"
+            >
+              <header>
+                <h1>DuckDB (WASM)</h1>
+                <span id="dbFlag" class="pill">DB: not initialized</span>
+                <button
+                  id="dbInitBtn"
+                  class="secondary"
+                  title="Instantiate DuckDB in the browser"
+                >
+                  Init DB
+                </button>
+              </header>
+
+              <main>
+                <!-- Insert panel -->
+                <div class="row">
+                  <div>
+                    <label for="name">Name</label>
+                    <input id="name" placeholder="e.g., Ada Lovelace" />
+                  </div>
+                  <div>
+                    <label for="age">Age</label>
+                    <input
+                      id="age"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g., 36"
+                    />
+                  </div>
+                  <div>
+                    <label for="city">City</label>
+                    <input id="city" placeholder="e.g., London" />
+                  </div>
+                  <div>
+                    <button id="addRowBtn" disabled>Add Row</button>
+                  </div>
+                </div>
+
+                <!-- SQL console -->
+                <div>
+                  <label for="sql" style="display: block; margin: 8px 0 6px"
+                    >SQL</label
+                  >
+                  <textarea
+                    id="sql"
+                    placeholder="SELECT * FROM people LIMIT 10;"
+                    style="min-height: 120px"
+                  ></textarea>
+                  <div
+                    style="
+                      margin-top: 10px;
+                      display: flex;
+                      gap: 8px;
+                      flex-wrap: wrap;
+                    "
+                  >
+                    <button id="runSqlBtn" disabled>Run SQL</button>
+                    <button id="createTblBtn" class="secondary" disabled>
+                      Create Table
+                    </button>
+                    <button id="dropTblBtn" class="secondary" disabled>
+                      Drop Table
+                    </button>
+                  </div>
+                </div>
+
+                <div class="results" id="results">
+                  (results will appear here)
+                </div>
+              </main>
+
+              <footer class="small">
+                Powered by <code>@duckdb/duckdb-wasm</code> (runs fully in your
+                browser)
+              </footer>
+            </div>
+          </div>
+        </section>
+
+        <!-- Page 4 (NEW) Mouse Radar -->
+        <section class="page" aria-label="Page 4">
+          <div class="inner" style="max-width: 1200px">
+            <h2 style="margin-bottom: 8px">Page Four · Mouse Radar (Realtime)</h2>
+            <p class="subtitle">Live mouse trails from all clients in the same <code>?room=</code>.</p>
+
+            <div class="radar radar-wrap" id="radar-app"
+              onwheel="event.stopPropagation();" ontouchmove="event.stopPropagation();">
+              <div id="radarHud">connecting…</div>
+              <div id="radarLegend"></div>
+              <canvas id="radarCanvas" aria-label="Mouse Radar"></canvas>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- SPA pager logic (updated for 3 pages) -->
+    <script>
+      (function () {
+        const pagesEl = document.getElementById("pages");
+        const btnUp = document.getElementById("btnUp");
+        const btnDown = document.getElementById("btnDown");
+
+        let index = 0;
+        let isAnimating = false;
+        let lastGestureAt = 0;
+        const MAX_INDEX = 3; // now three pages: 0..2
+        const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+        function updateUI() {
+          const y = index * -100;
+          pagesEl.style.transform = `translateY(${y}vh)`;
+          const atTop = index === 0;
+          const atBottom = index === MAX_INDEX;
+          btnUp.toggleAttribute("disabled", atTop);
+          btnUp.setAttribute("aria-disabled", String(atTop));
+          btnDown.toggleAttribute("disabled", atBottom);
+          btnDown.setAttribute("aria-disabled", String(atBottom));
+        }
+
+        function goTo(nextIndex) {
+          index = clamp(nextIndex, 0, MAX_INDEX);
+          isAnimating = true;
+          updateUI();
+          setTimeout(() => {
+            isAnimating = false;
+          }, 650);
+        }
+
+        function step(dir) {
+          const now = Date.now();
+          if (isAnimating || now - lastGestureAt < 650) return;
+          lastGestureAt = now;
+          goTo(index + dir);
+        }
+
+        btnUp.addEventListener("click", () => step(-1));
+        btnDown.addEventListener("click", () => step(1));
+
+        // Wheel navigation, but ignore if the target is inside scrollable app areas
+        window.addEventListener(
+          "wheel",
+          (e) => {
+            if (document.getElementById("ai-app")?.contains(e.target)) return;
+            if (document.getElementById("db-app")?.contains(e.target)) return;
+            const threshold = 10;
+            if (Math.abs(e.deltaY) < threshold) return;
+            step(e.deltaY > 0 ? 1 : -1);
+          },
+          { passive: true }
+        );
+
+        window.addEventListener("keydown", (e) => {
+          const active = document.activeElement;
+          if (
+            active &&
+            (active.tagName === "TEXTAREA" ||
+              active.tagName === "INPUT" ||
+              active.isContentEditable)
+          )
+            return;
+          const k = e.key;
+          if (["ArrowDown", "PageDown", " ", "Spacebar"].includes(k)) {
+            e.preventDefault();
+            step(1);
+          }
+          if (["ArrowUp", "PageUp"].includes(k)) {
+            e.preventDefault();
+            step(-1);
+          }
+          if (k === "Home") {
+            e.preventDefault();
+            goTo(0);
+          }
+          if (k === "End") {
+            e.preventDefault();
+            goTo(MAX_INDEX);
+          }
+        });
+
+        // Touch (vertical swipe) – ignore swipes that start inside the apps
+        let touchStartY = 0,
+          fromApp = false;
+        window.addEventListener(
+          "touchstart",
+          (e) => {
+            const t = e.touches?.[0];
+            if (!t) return;
+            fromApp =
+              document.getElementById("ai-app")?.contains(e.target) ||
+              document.getElementById("db-app")?.contains(e.target) ||
+              false;
+            touchStartY = t.clientY;
+          },
+          { passive: true }
+        );
+
+        window.addEventListener(
+          "touchend",
+          (e) => {
+            if (fromApp) return;
+            const touch = e.changedTouches && e.changedTouches[0];
+            if (!touch) return;
+            const deltaY = touchStartY - touch.clientY;
+            const swipeThreshold = 40;
+            if (Math.abs(deltaY) < swipeThreshold) return;
+            step(deltaY > 0 ? 1 : -1);
+          },
+          { passive: true }
+        );
+
+        updateUI();
+      })();
+    </script>
+
+    <!-- WebGPU AI demo (unchanged) -->
+    <script type="module">
+      // === UI elements ===
+      const promptEl = document.getElementById("prompt");
+      const loadBtn = document.getElementById("loadBtn");
+      const runBtn = document.getElementById("runBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const chatEl = document.getElementById("chat");
+      const statusEl = document.getElementById("status");
+      const logEl = document.getElementById("log");
+      const gpuBtn = document.getElementById("gpuBtn");
+      const gpuFlag = document.getElementById("gpuFlag");
+      const shaderFlag = document.getElementById("shaderFlag");
+      const readyFlag = document.getElementById("readyFlag");
+
+      async function detectWebGPU() {
+        if (!("gpu" in navigator)) {
+          gpuFlag.textContent = "WebGPU: not supported";
+          gpuFlag.style.background = "#ffe1e1";
+          return { supported: false };
+        }
+        try {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (!adapter) throw new Error("No adapter");
+          gpuFlag.textContent = "WebGPU: supported";
+          gpuFlag.style.background = "#e6f4ff";
+          if (adapter.features.has("shader-f16"))
+            shaderFlag.classList.remove("hidden");
+          return { supported: true };
+        } catch (e) {
+          gpuFlag.textContent = "WebGPU: unavailable";
+          gpuFlag.style.background = "#ffe1e1";
+          return { supported: false };
+        }
+      }
+
+      const WORKER_SRC = `
+      import { AutoTokenizer, AutoModelForCausalLM, TextStreamer, InterruptableStoppingCriteria, env }
+        from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
+
+      env.allowRemoteModels = true;
+      env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
+
+      const MODEL_ID = 'onnx-community/granite-4.0-micro-ONNX-web';
+      const stopping = new InterruptableStoppingCriteria();
+      let tokenizer, model, past_key_values = null;
+
+      async function check() {
+        try {
+          const adapter = await navigator.gpu?.requestAdapter();
+          if (!adapter) throw new Error('WebGPU is not supported (no adapter found)');
+          if (!adapter.features.has('shader-f16')) {
+            postMessage({ status: 'loading', data: 'Warning: shader-f16 not supported; performance may be reduced.' });
+          }
+        } catch (err) {
+          postMessage({ status: 'error', data: String(err) });
+        }
+      }
+
+      async function load() {
+        postMessage({ status: 'loading', data: 'Loading IBM Granite model… (~2.3 GB)'});
+        tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID, { progress_callback: (x) => postMessage(x) });
+        model = await AutoModelForCausalLM.from_pretrained(MODEL_ID, {
+          device: 'webgpu',
+          progress_callback: (x) => postMessage(x)
+        });
+        postMessage({ status: 'loading', data: 'Compiling shaders & warming up…' });
+        const warm = tokenizer('hello');
+        await model.generate({ ...warm, max_new_tokens: 1 });
+        postMessage({ status: 'ready' });
+      }
+
+      async function generate(messages) {
+        const inputs = tokenizer.apply_chat_template(messages, { add_generation_prompt: true, return_dict: true });
+        let t0, numTokens = 0, tps;
+        function token_callback_function() { t0 ??= performance.now(); if (++numTokens > 0) tps = (numTokens / (performance.now() - t0)) * 1000; }
+        const streamer = new TextStreamer(tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: (out) => postMessage({ status: 'update', output: out, tps, numTokens }), token_callback_function });
+        postMessage({ status: 'start' });
+        const { sequences, past_key_values: pkv } = await model.generate({
+          ...inputs,
+          past_key_values: past_key_values,
+          max_new_tokens: 512,
+          streamer,
+          stopping_criteria: stopping,
+          return_dict_in_generate: true,
+        });
+        past_key_values = pkv;
+        const decoded = tokenizer.batch_decode(sequences, { skip_special_tokens: true });
+        postMessage({ status: 'complete', output: decoded });
+      }
+
+      addEventListener('message', async (e) => {
+        const { type, data } = e.data || {};
+        try {
+          if (type === 'check') return check();
+          if (type === 'load') return load();
+          if (type === 'generate') { stopping.reset(); return generate(data); }
+          if (type === 'interrupt') return stopping.interrupt();
+          if (type === 'reset') { past_key_values = null; stopping.reset(); }
+        } catch (err) { postMessage({ status: 'error', data: (err && err.message) ? String(err.message) : String(err) }); }
+      });
+    `;
+
+      const worker = new Worker(
+        URL.createObjectURL(
+          new Blob([WORKER_SRC], { type: "text/javascript" })
+        ),
+        { type: "module" }
+      );
+
+      worker.addEventListener("message", (e) => {
+        const m = e.data || {};
+        switch (m.status) {
+          case "loading":
+            statusEl.textContent = "Status: " + m.data;
+            break;
+          case "initiate":
+          case "progress":
+            logEl.textContent = JSON.stringify(
+              { file: m.file, progress: m.progress, total: m.total },
+              null,
+              2
+            );
+            break;
+          case "ready":
+            statusEl.textContent = "Status: model ready";
+            readyFlag.classList.remove("hidden");
+            runBtn.disabled = false;
+            loadBtn.disabled = true;
+            resetBtn.disabled = false;
+            break;
+          case "start":
+            statusEl.textContent = "Status: generating...";
+            chatEl.textContent +=
+              (chatEl.textContent ? "\n\n" : "") + "Assistant: ";
+            runBtn.disabled = true;
+            break;
+          case "update":
+            chatEl.textContent += m.output;
+            break;
+          case "complete":
+            statusEl.textContent = "Status: idle";
+            runBtn.disabled = false;
+            if (Array.isArray(m.output)) {
+              const last = String(m.output.at(-1) ?? "");
+              if (!chatEl.textContent.endsWith(last))
+                chatEl.textContent += last;
+            }
+            break;
+          case "error":
+            statusEl.textContent = "Status: error";
+            alert("Error: " + m.data);
+            runBtn.disabled = false;
+            break;
+        }
+      });
+
+      document
+        .getElementById("loadBtn")
+        .addEventListener("click", () => worker.postMessage({ type: "load" }));
+      document.getElementById("runBtn").addEventListener("click", () => {
+        const msg = promptEl.value.trim();
+        if (!msg) return;
+        chatEl.textContent +=
+          (chatEl.textContent ? "\n\n" : "") + "You: " + msg + "\n";
+        worker.postMessage({
+          type: "generate",
+          data: [
+            { role: "system", content: "You are a helpful assistant." },
+            { role: "user", content: msg },
+          ],
+        });
+      });
+      document.getElementById("resetBtn").addEventListener("click", () => {
+        worker.postMessage({ type: "reset" });
+        chatEl.textContent = "";
+        logEl.textContent = "";
+      });
+      document.getElementById("gpuBtn").addEventListener("click", async () => {
+        const stats = await collectGpuStats();
+        alert("GPU stats (approx):\n\n" + JSON.stringify(stats, null, 2));
+      });
+
+      async function collectGpuStats() {
+        const out = { webgpu: {}, webgl: {}, system: {} };
+        if ("gpu" in navigator) {
+          try {
+            const adapter = await navigator.gpu.requestAdapter();
+            if (adapter) {
+              out.webgpu.supported = true;
+              if (adapter.requestAdapterInfo) {
+                try {
+                  out.webgpu.info = await adapter.requestAdapterInfo();
+                } catch {}
+              }
+              out.webgpu.features = Array.from(adapter.features.values());
+              out.webgpu.limits = Object.fromEntries(
+                Object.entries(adapter.limits)
+              );
+            }
+          } catch {}
+        } else {
+          out.webgpu.supported = false;
+        }
+        try {
+          const canvas = document.createElement("canvas");
+          const gl =
+            canvas.getContext("webgl") ||
+            canvas.getContext("experimental-webgl");
+          if (gl) {
+            const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+            out.webgl.version = gl.getParameter(gl.VERSION);
+            out.webgl.shadingLanguage = gl.getParameter(
+              gl.SHADING_LANGUAGE_VERSION
+            );
+            out.webgl.vendor = dbg
+              ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)
+              : gl.getParameter(gl.VENDOR);
+            out.webgl.renderer = dbg
+              ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)
+              : gl.getParameter(gl.RENDERER);
+            out.webgl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+            out.webgl.maxCombinedTextureImageUnits = gl.getParameter(
+              gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS
+            );
+          }
+        } catch {}
+        out.system.deviceMemoryGB = navigator.deviceMemory || null;
+        out.system.hardwareConcurrency = navigator.hardwareConcurrency || null;
+        return out;
+      }
+
+      (async () => {
+        await detectWebGPU();
+        worker.postMessage({ type: "check" });
+      })();
+    </script>
+
+  <!-- Page 3: DuckDB-WASM -->
+  <script type="module">
+    // ESM imports
+    import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.0/+esm';
+    import { tableFromIPC } from 'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.2/+esm';
+
+    // DOM helpers & lookups
+    const get = (id) => {
+      const el = document.getElementById(id);
+      if (!el) throw new Error('#' + id + ' not found');
+      return el;
+    };
+    const dbInitBtn   = get('dbInitBtn');
+    const dbFlag      = get('dbFlag');
+    const addRowBtn   = get('addRowBtn');
+    const dropTblBtn  = get('dropTblBtn');
+    const runSqlBtn   = get('runSqlBtn');
+    const nameEl      = get('name');
+    const ageEl       = get('age');
+    const cityEl      = get('city');
+    const sqlEl       = get('sql');
+    const resultsEl   = get('results');
+
+    let db = null;
+    let conn = null;
+
+    function setDbReady(ready) {
+      dbFlag.textContent = ready ? 'DB: ready' : 'DB: not initialized';
+      dbFlag.style.background = ready ? '#e6fbe6' : '';
+      addRowBtn.disabled = !ready;
+      dropTblBtn.disabled = !ready;
+      runSqlBtn.disabled = !ready;
+    }
+
+    function renderResults(rows) {
+      if (!rows || rows.length === 0) {
+        resultsEl.textContent = '(no rows)';
+        return;
+      }
+      const cols = Object.keys(rows[0]);
+      const thead = `<thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${String(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      resultsEl.innerHTML = `<table>${thead}${tbody}</table>`;
+    }
+
+    // Robust Arrow → rows helper (handles Table or IPC bytes; guards non-SELECT)
+    async function queryRows(sql) {
+      const res = await conn.query(sql);
+      if (res == null) return []; // non-SELECT
+      let table;
+      if (typeof res === 'object' && res && 'schema' in res && 'numRows' in res && typeof res.getChildAt === 'function') {
+        table = res; // already an Arrow Table
+      } else if (res instanceof Uint8Array || res instanceof ArrayBuffer) {
+        table = tableFromIPC(res);
+      } else {
+        try { table = tableFromIPC(res); } catch { return []; }
+      }
+      const cols = table.schema.fields.map(f => f.name);
+      const rows = [];
+      for (let r = 0; r < table.numRows; r++) {
+        const obj = {};
+        for (let c = 0; c < cols.length; c++) obj[cols[c]] = table.getChildAt(c).get(r);
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    // Init DB (blob worker to avoid cross-origin worker restrictions) + auto create schema
+    dbInitBtn.addEventListener('click', async () => {
+      try {
+        dbFlag.textContent = 'DB: loading…';
+        const bundles = duckdb.getJsDelivrBundles();
+        const bundle = await duckdb.selectBundle(bundles);
+        const workerUrl = URL.createObjectURL(new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' }));
+        const worker = new Worker(workerUrl);
+        const logger = new duckdb.ConsoleLogger();
+        db = new duckdb.AsyncDuckDB(logger, worker);
+        await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+        conn = await db.connect();
+
+        // Ensure sequence + table exist (portable across DuckDB versions)
+        await conn.query(`
+          CREATE SEQUENCE IF NOT EXISTS people_id_seq;
+          CREATE TABLE IF NOT EXISTS people (
+            id INTEGER PRIMARY KEY DEFAULT nextval('people_id_seq'),
+            name VARCHAR,
+            age INTEGER,
+            city VARCHAR
+          );
+        `);
+
+        setDbReady(true);
+        sqlEl.value = "SELECT * FROM people LIMIT 10;";
+        URL.revokeObjectURL(workerUrl);
+      } catch (err) {
+        alert('DuckDB init failed: ' + err);
+        setDbReady(false);
+        console.error(err);
+      }
+    });
+
+    // Drop table (for quick reset)
+    dropTblBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      try {
+        await conn.query('DROP TABLE IF EXISTS people;');
+        renderResults([{ info: 'people table dropped' }]);
+      } catch (e) {
+        resultsEl.textContent = 'Error dropping table: ' + e;
+      }
+    });
+
+    // Insert row (prepared statement)
+    addRowBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      const name = nameEl.value.trim();
+      const age  = Number.parseInt(ageEl.value, 10);
+      const city = cityEl.value.trim();
+      if (!name || !Number.isFinite(age) || !city) {
+        alert('Please fill name, age, and city.');
+        return;
+      }
+      try {
+        // guard schema (in case Drop was pressed)
+        await conn.query(`
+          CREATE SEQUENCE IF NOT EXISTS people_id_seq;
+          CREATE TABLE IF NOT EXISTS people (
+            id INTEGER PRIMARY KEY DEFAULT nextval('people_id_seq'),
+            name VARCHAR,
+            age INTEGER,
+            city VARCHAR
+          );
+        `);
+        const stmt = await conn.prepare('INSERT INTO people(name, age, city) VALUES (?, ?, ?);');
+        await stmt.query(name, age, city);
+        await stmt.close();
+        const rows = await queryRows('SELECT * FROM people ORDER BY id DESC LIMIT 10;');
+        renderResults(rows);
+        nameEl.value = ''; ageEl.value = ''; cityEl.value = '';
+        nameEl.focus();
+      } catch (e) {
+        resultsEl.textContent = 'Insert failed: ' + e;
+        console.error(e);
+      }
+    });
+
+    // Freeform SQL
+    runSqlBtn.addEventListener('click', async () => {
+      if (!conn) return;
+      const sql = sqlEl.value.trim();
+      if (!sql) return;
+      try {
+        const rows = await queryRows(sql);
+        renderResults(rows);
+      } catch (e) {
+        resultsEl.textContent = 'SQL error: ' + e;
+        console.error(e);
+      }
+    });
+
+    // Enter key convenience
+    cityEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') addRowBtn.click(); });
+  </script>
+  
+  <!-- Page 4: Mouse Radar (ported from dashboard.html) -->
+  <script type="module">
+    // Mouse Radar module - same origin API expected (set BASE if different)
+    const BASE = 'http://localhost:8090'; // If your API is elsewhere, set e.g. 'https://your-ngrok.ngrok.io'
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room') || 'default';
+
+    const canvas = document.getElementById('radarCanvas');
+    const hud    = document.getElementById('radarHud');
+    const legend = document.getElementById('radarLegend');
+    const ctx = canvas.getContext('2d');
+
+    let W, H, DPR = devicePixelRatio || 1;
+    function resize() {
+      W = innerWidth; H = innerHeight;
+      canvas.width = W * DPR; canvas.height = H * DPR;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    addEventListener('resize', resize); resize();
+
+    // Color + path registries
+    const colors = new Map(); // sessionId -> color
+    const paths  = new Map(); // sessionId -> [{x,y,t}, ...]
+
+    function colorFor(id) {
+      if (!colors.has(id)) {
+        let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+        colors.set(id, `hsl(${h % 360} 80% 60%)`);
+        renderLegend();
+      }
+      return colors.get(id);
+    }
+
+    function addPoints(sessionId, points) {
+      const arr = paths.get(sessionId) || [];
+      for (const p of points) {
+        const x = (p.x / p.vw) * W;
+        const y = (p.y / p.vh) * H;
+        arr.push({ x, y, t: p.t });
+      }
+      while (arr.length > 800) arr.shift();
+      paths.set(sessionId, arr);
+    }
+
+    function draw() {
+      // Faint trail fade for motion blur
+      ctx.fillStyle = 'rgba(11,14,20,0.08)';
+      ctx.fillRect(0, 0, W, H);
+      for (const [id, pts] of paths) {
+        if (pts.length < 2) continue;
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = colorFor(id);
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+        const head = pts[pts.length - 1];
+        ctx.beginPath(); ctx.arc(head.x, head.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = colorFor(id); ctx.fill();
+      }
+      requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+
+    function renderLegend() {
+      const items = [...colors.entries()].map(([id, col]) =>
+        `<span style="color:${col}">●</span> <code>${id.slice(0,8)}</code>`
+      );
+      legend.innerHTML = items.join(' &nbsp; ');
+    }
+
+    async function loopStats() {
+      try {
+        const r = await fetch(`${BASE}/mouse/stats?room=${encodeURIComponent(room)}`);
+        const s = await r.json();
+        hud.textContent = `room: ${s.room} | dashboards: ${s.viewers} | spies: ${s.activeSpies}`;
+      } catch {}
+      setTimeout(loopStats, 1500);
+    }
+    loopStats();
+
+    const es = new EventSource(`${BASE}/events/mouse?room=${encodeURIComponent(room)}`);
+    es.addEventListener('hello', () => hud.textContent = 'connected…');
+    es.addEventListener('point', (e) => {
+      const { sessionId, points } = JSON.parse(e.data);
+      colorFor(sessionId);
+      addPoints(sessionId, points);
+    });
+    es.onerror = () => { /* browser auto-retries */ };
+  </script>
+
+</body>
+</html>
