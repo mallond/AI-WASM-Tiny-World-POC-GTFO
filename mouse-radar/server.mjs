@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 
 const app = Fastify({ logger: true });
 
-// CORS so you can also embed the spy on other origins if you want
+// Permissive CORS for all non-SSE routes (demo)
 await app.register(cors, { origin: true });
 
 // Serve the dashboard + demo spy page
@@ -19,38 +19,38 @@ await app.register(fastifyStatic, { root: join(__dirname, 'public') });
 
 // In-memory state per "room"
 const rooms = new Map(); // room -> { clients:Set<res>, lastSeen: Map<sessionId, ts> }
-
 function getRoom(name) {
-  if (!rooms.has(name)) {
-    rooms.set(name, { clients: new Set(), lastSeen: new Map() });
-  }
+  if (!rooms.has(name)) rooms.set(name, { clients: new Set(), lastSeen: new Map() });
   return rooms.get(name);
 }
 
-// SSE subscription for mouse points
+// SSE subscription for mouse points (ALLOW ALL CORS on the stream)
+// SSE subscription for mouse points (ALLOW ALL, hard-coded via writeHead)
 app.get('/events/mouse', async (req, reply) => {
   const { room = 'default' } = req.query ?? {};
   const r = getRoom(room);
 
+  // IMPORTANT: writeHead with ACAO before any body bytes
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-store',
     'Connection': 'keep-alive',
-    // 'X-Accel-Buffering': 'no', // uncomment if behind nginx
+    'Access-Control-Allow-Origin': '*',      // <-- allow all for demo
+    // Do NOT add Access-Control-Allow-Credentials with "*"
+    // 'X-Accel-Buffering': 'no', // if behind nginx
   });
 
-  // simple hello for UX (optional)
+  // optional hello
   reply.raw.write(`event: hello\n`);
   reply.raw.write(`data: {"room":"${room}"}\n\n`);
 
-  // Keep alive
+  // keep-alive
   const hb = setInterval(() => {
     try { reply.raw.write(`:ping\n\n`); } catch {}
   }, 15000);
 
-  // Track this client
+  // track client
   r.clients.add(reply.raw);
-
   req.raw.on('close', () => {
     clearInterval(hb);
     r.clients.delete(reply.raw);
@@ -85,8 +85,9 @@ app.post('/spy/batch', async (req, reply) => {
     const r = getRoom(room);
     r.lastSeen.set(sessionId, Date.now());
 
-    const frame = `event: point\n` +
-                  `data: ${JSON.stringify({ sessionId, points })}\n\n`;
+    const frame =
+      `event: point\n` +
+      `data: ${JSON.stringify({ sessionId, points })}\n\n`;
 
     for (const res of r.clients) {
       try { res.write(frame); } catch {}

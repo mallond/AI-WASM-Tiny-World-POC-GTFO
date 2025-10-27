@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Mouse Radar — Spy Demo Page</title>
+<style>
+  html,body { height:100%; margin:0; font:16px system-ui; display:grid; place-items:center; }
+  .box { width: min(90vw, 800px); padding: 24px; border: 2px dashed #888; border-radius: 12px; }
+  .muted { color:#666; font-size: 14px; }
+</style>
+<div class="box">
+  <h1>Spy Demo Page</h1>
+  <p>Move your mouse or finger around—your trail will appear on the dashboard.</p>
+  <p class="muted">Tip: open this in multiple devices/browser windows to see multiple cursors.</p>
+</div>
+<script>
+  // configure the tracker to same-origin. If your API is elsewhere, set: window.__MOUSE_RADAR_BASE__ = 'https://your-ngrok.ngrok.io';
+  window.__MOUSE_RADAR_BASE__ = '';
+</script>
+<script src="/spy-snippet.js" defer></script>
